@@ -19,7 +19,7 @@ public final class MarqueeLabel: UIView {
   
   private var sublabelLeftConstraints: (NSLayoutConstraint, NSLayoutConstraint)!
   
-  private var displayLink: CADisplayLink?
+  private var displayLink: CADisplayLink!
   
   private var lastTimestamp: CFTimeInterval?
   
@@ -41,7 +41,7 @@ public final class MarqueeLabel: UIView {
   }
   
   deinit {
-    displayLink?.invalidate()
+    displayLink.invalidate()
   }
   
   // MARK: - Setup
@@ -67,8 +67,8 @@ public final class MarqueeLabel: UIView {
   
   private func setupDisplayLink() {
     let link = CADisplayLink(target: WeakProxy(target: self), selector: #selector(self.displayLinkRefreshed(_:)))
-    link.add(to: .main, forMode: .commonModes)
     link.isPaused = true
+    link.add(to: .main, forMode: .commonModes)
     self.displayLink = link
   }
   
@@ -91,9 +91,9 @@ public final class MarqueeLabel: UIView {
     }
     
     if newWindow == nil {
-      displayLink?.isPaused = true
+      displayLink.isPaused = true
     } else {
-      displayLink?.isPaused = false
+      displayLink.isPaused = false
     }
   }
   // MARK: - Action Handlers
@@ -129,7 +129,6 @@ public final class MarqueeLabel: UIView {
         sublabelLeftConstraints.1.constant -= distanceToScroll
       }
     }
-
   }
   
   // MARK: - Public Methods
@@ -192,7 +191,7 @@ public final class MarqueeLabel: UIView {
   }
   
   public func transformToNormalLabel() {
-    displayLink?.isPaused = true
+    displayLink.isPaused = true
     resetSublabelOffsets()
   }
   
@@ -200,6 +199,7 @@ public final class MarqueeLabel: UIView {
   private func modifyBothSublabels(_ block: (UILabel) -> Void) {
     block(firstSublabel)
     block(secondSublabel)
+    invalidateIntrinsicContentSize()
   }
   
   private func resetSublabelOffsets() { 
@@ -211,5 +211,4 @@ public final class MarqueeLabel: UIView {
       sublabelLeftConstraints.1.constant = leftPadding
     }
   }
-  
 }

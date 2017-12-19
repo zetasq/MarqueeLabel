@@ -19,7 +19,7 @@ class RootViewController: UIViewController {
     label.font = UIFont.systemFont(ofSize: 17)
     label.backgroundColor = UIColor(white: 0, alpha: 0.3)
     label.layer.cornerRadius = 6
-    label.scrollingSpeed = 100
+    label.scrollingSpeed = 50
     return label
   }()
   
