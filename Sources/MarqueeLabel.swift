@@ -7,11 +7,25 @@
 
 import UIKit
 
+@objc
 public final class MarqueeLabel: UIView {
-
-  public var scrollingSpeed: CGFloat = 100 // points per second
   
+  @objc
+  public var isPaused: Bool = true {
+    didSet {
+      if isPaused != oldValue {
+        updateScrollState()
+      }
+    }
+  }
+  
+  @objc
+  public var scrollingSpeed: CGFloat = 50 // points per second
+  
+  @objc
   public let leftPadding: CGFloat
+  
+  @objc
   public let rightPadding: CGFloat
   
   private let firstSublabel = UILabel()
@@ -20,10 +34,12 @@ public final class MarqueeLabel: UIView {
   private var sublabelLeftConstraints: (NSLayoutConstraint, NSLayoutConstraint)!
   
   private var displayLink: CADisplayLink!
-  
   private var lastTimestamp: CFTimeInterval?
   
+  private var panGestureRecognizer: UIPanGestureRecognizer!
+  
   // MARK: - Init & Deinit
+  @objc
   public init(leftPadding: CGFloat, rightPadding: CGFloat) {
     self.leftPadding = leftPadding
     self.rightPadding = rightPadding
@@ -34,6 +50,7 @@ public final class MarqueeLabel: UIView {
     
     setupUI()
     setupDisplayLink()
+    setupGestureRecognizer()
   }
   
   public required init?(coder aDecoder: NSCoder) {
@@ -45,7 +62,7 @@ public final class MarqueeLabel: UIView {
   }
   
   // MARK: - Setup
-  private func setupUI() {    
+  private func setupUI() {   
     addSubview(firstSublabel)
     firstSublabel.translatesAutoresizingMaskIntoConstraints = false
     firstSublabel.topAnchor.constraint(equalTo: self.topAnchor).isActive = true
@@ -62,7 +79,7 @@ public final class MarqueeLabel: UIView {
     
     self.sublabelLeftConstraints = (firstLabelXConstraint, secondLabelXConstraint)
     
-    resetSublabelOffsets()
+    resetScrollOffset()
   }
   
   private func setupDisplayLink() {
@@ -72,7 +89,22 @@ public final class MarqueeLabel: UIView {
     self.displayLink = link
   }
   
+  private func setupGestureRecognizer() {
+    panGestureRecognizer = UIPanGestureRecognizer(target: self, action: #selector(self.handlePanGestureRecognizer(_:)))
+    panGestureRecognizer.maximumNumberOfTouches = 1
+    addGestureRecognizer(panGestureRecognizer)
+  }
+  
   // MARK: - UIView Overrides
+  public override var frame: CGRect {
+    didSet {
+      if frame.size != oldValue.size {
+        resetScrollOffset()
+        updateScrollState()
+      }
+    }
+  }
+  
   public override var intrinsicContentSize: CGSize {
     let size = firstSublabel.intrinsicContentSize
     return CGSize(width: size.width + leftPadding + rightPadding, height: size.height)
@@ -83,18 +115,10 @@ public final class MarqueeLabel: UIView {
     return CGSize(width: size.width + leftPadding + rightPadding, height: size.height)
   }
   
-  public override func willMove(toWindow newWindow: UIWindow?) {
-    super.willMove(toWindow: newWindow)
+  public override func didMoveToWindow() {
+    super.didMoveToWindow()
     
-    guard self.window != newWindow else {
-      return
-    }
-    
-    if newWindow == nil {
-      displayLink.isPaused = true
-    } else {
-      displayLink.isPaused = false
-    }
+    updateScrollState()
   }
   // MARK: - Action Handlers
   @objc
@@ -115,7 +139,7 @@ public final class MarqueeLabel: UIView {
     if scrollingSpeed >= 0 {
       if sublabelLeftConstraints.1.constant - distanceToScroll < leftPadding {
         sublabelLeftConstraints = (sublabelLeftConstraints.1, sublabelLeftConstraints.0)
-        resetSublabelOffsets()
+        resetScrollOffset()
       } else {
         sublabelLeftConstraints.0.constant -= distanceToScroll
         sublabelLeftConstraints.1.constant -= distanceToScroll
@@ -123,7 +147,7 @@ public final class MarqueeLabel: UIView {
     } else {
       if sublabelLeftConstraints.0.constant - distanceToScroll > leftPadding {
         sublabelLeftConstraints = (sublabelLeftConstraints.1, sublabelLeftConstraints.0)
-        resetSublabelOffsets()
+        resetScrollOffset()
       } else {
         sublabelLeftConstraints.0.constant -= distanceToScroll
         sublabelLeftConstraints.1.constant -= distanceToScroll
@@ -131,68 +155,94 @@ public final class MarqueeLabel: UIView {
     }
   }
   
+  @objc
+  private func handlePanGestureRecognizer(_ recognizer: UIPanGestureRecognizer) {
+    switch recognizer.state {
+    case .began:
+      guard !isPaused else {
+        recognizer.isEnabled = false
+        recognizer.isEnabled = true
+        return
+      }
+      displayLink.isPaused = true
+    case .changed:
+      let translation = recognizer.translation(in: self)
+      
+      sublabelLeftConstraints.0.constant += translation.x
+      sublabelLeftConstraints.1.constant += translation.x
+      
+      if sublabelLeftConstraints.1.constant < leftPadding {
+        sublabelLeftConstraints.0.constant += 2 * intrinsicContentSize.width
+        sublabelLeftConstraints = (sublabelLeftConstraints.1, sublabelLeftConstraints.0)
+      } else if sublabelLeftConstraints.0.constant > leftPadding {
+        sublabelLeftConstraints.1.constant -= 2 * intrinsicContentSize.width
+        sublabelLeftConstraints = (sublabelLeftConstraints.1, sublabelLeftConstraints.0)
+      }
+      
+      recognizer.setTranslation(.zero, in: self)
+    case .ended, .cancelled, .failed, .possible:
+      updateScrollState()
+    }
+  }
+  
   // MARK: - Public Methods
+  @objc
+  dynamic
   public var text: String? {
     get {
       return firstSublabel.text
     }
     set {
       modifyBothSublabels { $0.text = newValue }
-      resetSublabelOffsets()
     }
   }
   
+  @objc
+  dynamic
   public var attributedText: NSAttributedString? {
     get {
       return firstSublabel.attributedText
     }
     set {
       modifyBothSublabels { $0.attributedText = newValue }
-      resetSublabelOffsets()
     }
   }
   
+  @objc
   public var font: UIFont! {
     get {
       return firstSublabel.font
     }
     set {
       modifyBothSublabels { $0.font = newValue }
-      resetSublabelOffsets()
     }
   }
   
+  @objc
   public var textColor: UIColor! {
     get {
       return firstSublabel.textColor
     }
     set {
       modifyBothSublabels { $0.textColor = newValue }
-      resetSublabelOffsets()
     }
   }
   
+  @objc
   public var textAlignment: NSTextAlignment {
     get {
       return firstSublabel.textAlignment
     }
     set {
       modifyBothSublabels { $0.textAlignment = newValue }
-      resetSublabelOffsets()
     }
   }
   
-  public func startAnimating() {
-    displayLink?.isPaused = false
-  }
-  
-  public func stopAnimating() {
-    displayLink?.isPaused = true
-  }
-  
+  @objc
   public func transformToNormalLabel() {
-    displayLink.isPaused = true
-    resetSublabelOffsets()
+    lastTimestamp = nil
+    resetScrollOffset()
+    self.isPaused = true
   }
   
   // MARK: - Private Methods
@@ -200,9 +250,11 @@ public final class MarqueeLabel: UIView {
     block(firstSublabel)
     block(secondSublabel)
     invalidateIntrinsicContentSize()
+    resetScrollOffset()
+    updateScrollState()
   }
   
-  private func resetSublabelOffsets() { 
+  private func resetScrollOffset() { 
     if scrollingSpeed > 0 {
       sublabelLeftConstraints.0.constant = leftPadding
       sublabelLeftConstraints.1.constant = intrinsicContentSize.width + leftPadding
@@ -210,5 +262,23 @@ public final class MarqueeLabel: UIView {
       sublabelLeftConstraints.0.constant = -(intrinsicContentSize.width - leftPadding)
       sublabelLeftConstraints.1.constant = leftPadding
     }
+    layoutIfNeeded()
+  }
+  
+  private func updateScrollState() {
+    lastTimestamp = nil
+    
+    if frame.size.width >= intrinsicContentSize.width {
+      displayLink.isPaused = true
+      
+      firstSublabel.isHidden = !(firstSublabel.frame.minX == leftPadding)
+      secondSublabel.isHidden = !(secondSublabel.frame.minX == leftPadding)
+    } else {
+      displayLink.isPaused = window == nil || self.isPaused
+      
+      firstSublabel.isHidden = false
+      secondSublabel.isHidden = false
+    }
   }
 }
+

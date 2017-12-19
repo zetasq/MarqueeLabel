@@ -20,6 +20,8 @@ class RootViewController: UIViewController {
     label.backgroundColor = UIColor(white: 0, alpha: 0.3)
     label.layer.cornerRadius = 6
     label.scrollingSpeed = 50
+    label.isPaused = false
+    
     return label
   }()
   
