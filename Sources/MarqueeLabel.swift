@@ -11,7 +11,7 @@ import UIKit
 public final class MarqueeLabel: UIView {
   
   @objc
-  public var isPaused: Bool = true {
+  public var isPaused: Bool = false {
     didSet {
       if isPaused != oldValue {
         updateScrollState()
@@ -20,7 +20,7 @@ public final class MarqueeLabel: UIView {
   }
   
   @objc
-  public var scrollingSpeed: CGFloat = 50 // points per second
+  public var scrollingSpeed: CGFloat = 50 // points per second, positive means scrolls to left
   
   @objc
   public let leftPadding: CGFloat
@@ -51,6 +51,12 @@ public final class MarqueeLabel: UIView {
     setupUI()
     setupDisplayLink()
     setupGestureRecognizer()
+    setScrollingSpeedForNatualDirection(30)
+  }
+  
+  @objc
+  public convenience init() {
+    self.init(leftPadding: 0, rightPadding: 30)
   }
   
   public required init?(coder aDecoder: NSCoder) {
@@ -84,7 +90,6 @@ public final class MarqueeLabel: UIView {
   
   private func setupDisplayLink() {
     let link = CADisplayLink(target: WeakProxy(target: self), selector: #selector(self.displayLinkRefreshed(_:)))
-    link.isPaused = true
     link.add(to: .main, forMode: .commonModes)
     self.displayLink = link
   }
@@ -100,7 +105,7 @@ public final class MarqueeLabel: UIView {
     didSet {
       if frame.size != oldValue.size {
         resetScrollOffset()
-        updateScrollState()
+        lastTimestamp = nil
       }
     }
   }
@@ -119,6 +124,20 @@ public final class MarqueeLabel: UIView {
     super.didMoveToWindow()
     
     updateScrollState()
+  }
+  
+  public override var isHidden: Bool {
+    get {
+      return super.isHidden
+    }
+    set {
+      super.isHidden = newValue
+      if newValue {
+        displayLink.isPaused = true
+      } else {
+        updateScrollState()
+      }
+    }
   }
   // MARK: - Action Handlers
   @objc
@@ -187,7 +206,16 @@ public final class MarqueeLabel: UIView {
   
   // MARK: - Public Methods
   @objc
-  dynamic
+  public func setScrollingSpeedForNatualDirection(_ speed: CGFloat) {
+    switch UIView.userInterfaceLayoutDirection(for: firstSublabel.semanticContentAttribute) {
+    case .leftToRight:
+      scrollingSpeed = speed
+    case .rightToLeft:
+      scrollingSpeed = -speed
+    }
+  }
+  
+  @objc
   public var text: String? {
     get {
       return firstSublabel.text
@@ -198,7 +226,6 @@ public final class MarqueeLabel: UIView {
   }
   
   @objc
-  dynamic
   public var attributedText: NSAttributedString? {
     get {
       return firstSublabel.attributedText
@@ -251,7 +278,6 @@ public final class MarqueeLabel: UIView {
     block(secondSublabel)
     invalidateIntrinsicContentSize()
     resetScrollOffset()
-    updateScrollState()
   }
   
   private func resetScrollOffset() { 
@@ -262,23 +288,17 @@ public final class MarqueeLabel: UIView {
       sublabelLeftConstraints.0.constant = -(intrinsicContentSize.width - leftPadding)
       sublabelLeftConstraints.1.constant = leftPadding
     }
-    layoutIfNeeded()
   }
   
   private func updateScrollState() {
     lastTimestamp = nil
     
-    if frame.size.width >= intrinsicContentSize.width {
+    guard window != nil else {
       displayLink.isPaused = true
-      
-      firstSublabel.isHidden = !(firstSublabel.frame.minX == leftPadding)
-      secondSublabel.isHidden = !(secondSublabel.frame.minX == leftPadding)
-    } else {
-      displayLink.isPaused = window == nil || self.isPaused
-      
-      firstSublabel.isHidden = false
-      secondSublabel.isHidden = false
+      return
     }
+    
+    displayLink.isPaused = self.isPaused
   }
 }
 
